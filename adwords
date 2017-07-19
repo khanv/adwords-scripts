@@ -14,18 +14,14 @@ function main() {
   for (var i=0; i<input_range_data.length; i++){
     if ( (input_range_data[i][2] == "Да") || (input_range_data[i][2] == "да") ){
       check_str_ids.push(input_range_data[i]);
-//      Logger.log("Да");
     }
-//    Logger.log("18: %s", input_range_data[i][2]);
   }
   
 //  обходим все аккаунты
   // Get an account iterator.
   var accountIterator = MccApp.accounts()
   .withCondition("ExcludeHiddenAccounts = true")
-//  .withIds(["573-554-8628"])
   .get();
-  // Logger.log("%s", accountIterator.totalNumEntities());
   var range_array = [];
   var account_arr =[];
   while (accountIterator.hasNext()) {
@@ -35,13 +31,9 @@ function main() {
   }
   
   for (var i=0; i<account_arr.length; i++){
-//    Logger.log("%s, %s", account_arr[i].getCustomerId(), account_arr[i].getName());
-    
-    //    sheet.appendRow([account.getCustomerId(), account.getName()]);
 //    проверяем текущий аккаунт, надо на нём делать переметку?
     var peremechat = false;
     for (var j=0; j<check_str_ids.length; j++){
-//      Logger.log("41: %s",check_str_ids[j][1]);
       if (account_arr[i].getCustomerId() == check_str_ids[j][1]){
         range_array.push([account_arr[i].getName(), account_arr[i].getCustomerId(), "Да"]);
         peremechat = true;
@@ -57,21 +49,16 @@ function main() {
       var campaignIterator = AdWordsApp.campaigns().get();
       while (campaignIterator.hasNext()) {
         var campaign = campaignIterator.next();
-//        Logger.log('Campaign Name: ' + campaign.getName());
-        //     Logger.log('Enabled: ' + campaign.isEnabled());
-        //     Logger.log('Tracking template: ' + campaign.urls().getTrackingTemplate());
         
         //     делаем из названия кампании транслит
         var campaign_name_translit = translit(campaign.getName());
-//        Logger.log(campaign_name_translit);
         
         //     сравниваем наш шаблонный шаблон (http://prntscr.com/fbwhm4 :D) с текущим шаблоном кампании 
         var template_template = "{lpurl}?{lpurl}{_preutm}=&utm_source=google&utm_medium=cpc&utm_campaign="+campaign_name_translit+"|{campaignid}&utm_content=k50id|{targetid}|cid|{campaignid}|aid|{creative}|gid|{adgroupid}|pos|{adposition}|src|{network}_{placement}|dvc|{device}|reg|{loc_physical_ms}|rin|{loc_interest_ms}|&utm_term={keyword}&k50id={adgroupid}|{targetid}";
-        //     Logger.log(template_template);
         
         if (template_template != campaign.urls().getTrackingTemplate()){
 //          перемечаем
-//          
+   
           Logger.log("Перемечаем кампанию: %s", campaign.getName());
           Logger.log("Потому что не совпадает наш шаблонный шаблон: %s, и текущий: %s", template_template, campaign.urls().getTrackingTemplate());
           campaign.urls().setTrackingTemplate(template_template);
