@@ -1,0 +1,769 @@
+// токен получаем по ссылке: 
+// https://oauth.yandex.ru/authorize?response_type=token&client_id=8eb2146651474afb9eae7fd211886fbb
+var token = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+
+var SPREADSHEET_URL = 'https://docs.google.com/spreadsheets/d/XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/edit';
+
+var SHEET_NAME = 'Я.Директ';
+
+function main() {
+  getAgencyClients();
+  peremetka_start();
+}
+
+function splitTo( arr, n) {
+  var plen = Math.ceil(arr.length / n);
+
+  return arr.reduce( function( p, c, i, a) {
+    if(i%plen === 0) p.push({});
+    p[p.length-1][i] = c;
+    return p;
+  }, []);
+}
+
+function chunkArray(arr, chunk) {
+  var i, j, tmp = [];
+  for (i = 0, j = arr.length; i < j; i += chunk) {
+    tmp.push(arr.slice(i, i + chunk));
+  }
+  return tmp;
+}
+
+// получить кампании логина
+function getClientCampaignIds(client_login){
+  var data = {
+    "method": "get",
+    "params": {
+      "SelectionCriteria": {
+//        --- рабочие ---
+        "Statuses": ["MODERATION", "ACCEPTED"],
+        "States": ["SUSPENDED", "ON", "OFF"],
+//        --- рабочие ---
+      },
+      "FieldNames": ["Id", "Name"],
+    }
+  };
+  var options = {
+    'method' : 'post',
+    'contentType': 'application/json',
+    'headers': {
+      'Authorization': 'Bearer '+token,
+      'Accept-Language': 'ru',
+      'Client-Login': client_login,
+    }, 
+    // Convert the JavaScript object to a JSON string.
+    'payload' : JSON.stringify(data)
+  };
+  var response, ya_direct_data={}, campaigns;
+  while (ya_direct_data.result == undefined) {
+    response = UrlFetchApp.fetch('https://api.direct.yandex.com/json/v5/campaigns', options);
+    ya_direct_data = JSON.parse(response);
+    Logger.log("getClientCampaignIds");
+    
+    if (ya_direct_data.result != undefined){
+      campaigns = ya_direct_data.result.Campaigns;
+    }else{
+      Logger.log(ya_direct_data);
+      Utilities.sleep(500);
+    }
+  }
+  
+  return campaigns;
+}
+
+function getAds(campaignIds, client_login){
+  var data = {
+    "method": "get",
+    "params": {
+      "SelectionCriteria": {
+        "CampaignIds": [campaignIds],
+//        --- рабочие ---
+        "Statuses": ["MODERATION", "ACCEPTED", "PREACCEPTED"],
+        "States": ["SUSPENDED", "ON", "OFF", "OFF_BY_MONITORING"],
+//        --- рабочие ---
+      },
+      "FieldNames": ["Id", "Type", "Subtype", "CampaignId"],
+      "TextAdFieldNames": ["Href", "SitelinkSetId"],
+      "TextImageAdFieldNames": ["AdImageHash", "Href"],
+    }
+  };
+  var options = {
+    'method' : 'post',
+    'contentType': 'application/json',
+    'headers': {
+      'Authorization': 'Bearer '+token,
+      'Accept-Language': 'ru',
+      'Client-Login': client_login,
+    }, 
+    // Convert the JavaScript object to a JSON string.
+    'payload' : JSON.stringify(data)
+  };
+  var response, ya_direct_data={}, ads;
+  while (ya_direct_data.result == undefined) {
+    response = UrlFetchApp.fetch('https://api.direct.yandex.com/json/v5/ads', options);
+    ya_direct_data = JSON.parse(response);
+    Logger.log("getAds");
+    if (ya_direct_data.result != undefined){
+      ads = ya_direct_data.result.Ads;
+    }else{
+      Logger.log(ya_direct_data);
+      Utilities.sleep(500);
+    }
+  }
+  return ads;
+}
+
+function updateAds(AdUpdateItem , client_login){
+  var data = {
+    "method": "update",
+    "params": {
+      "Ads": AdUpdateItem,
+    }
+  };
+  var options = {
+    'method' : 'post',
+    'contentType': 'application/json',
+    'headers': {
+      'Authorization': 'Bearer '+token,
+      'Accept-Language': 'ru',
+      'Client-Login': client_login,
+    }, 
+    // Convert the JavaScript object to a JSON string.
+    'payload' : JSON.stringify(data)
+  };
+  var response, ya_direct_data={}, ads;
+  while (ya_direct_data.result == undefined) {
+    response = UrlFetchApp.fetch('https://api.direct.yandex.com/json/v5/ads', options);
+    ya_direct_data = JSON.parse(response);
+    Logger.log("updateAds");
+    if (ya_direct_data.result != undefined){
+      ads = ya_direct_data.result.UpdateResults;
+      
+      for (var i=0; i<ads.length; i++){
+        if (ads[i].Errors != undefined){
+          for (var j=0; j<ads[i].Errors.length; j++){
+            if (ads[i].Errors[j].Details != undefined){
+              Logger.log("updateAds Error: %s | %s | %s", ads[i].Errors[j].Code, ads[i].Errors[j].Message, ads[i].Errors[j].Details);
+            }else{
+              Logger.log("updateAds Error: %s | %s", ads[i].Errors[j].Code, ads[i].Errors[j].Message);
+            }
+          }
+        }
+      }
+      
+    }else{
+      Logger.log(ya_direct_data);
+      Utilities.sleep(500);
+    }
+  }
+  
+  return ads;
+}
+
+function getSitelinks(SitelinksIds, client_login){
+  var data = {
+    "method": "get",
+    "params": {
+      "SelectionCriteria": {
+        "Ids": SitelinksIds,
+      },
+      "FieldNames": ["Id", "Sitelinks"],
+    }
+  };
+  var options = {
+    'method' : 'post',
+    'contentType': 'application/json',
+    'headers': {
+      'Authorization': 'Bearer '+token,
+      'Accept-Language': 'ru',
+      'Client-Login': client_login,
+    }, 
+    // Convert the JavaScript object to a JSON string.
+    'payload' : JSON.stringify(data)
+  };
+  var response, ya_direct_data={}, sitelinks;
+  while (ya_direct_data.result == undefined) {
+    response = UrlFetchApp.fetch('https://api.direct.yandex.com/json/v5/sitelinks', options);
+    ya_direct_data = JSON.parse(response);
+    Logger.log("getSitelinks");
+    
+    if (ya_direct_data.result != undefined){
+      sitelinks = ya_direct_data.result.SitelinksSets;
+    }else{
+      Logger.log(ya_direct_data);
+      Utilities.sleep(500);
+    }
+  }
+
+  return sitelinks;
+}
+
+function addSitelinks(SitelinksSetAddItem, client_login){
+  var data = {
+    "method": "add",
+    "params": {
+      "SitelinksSets": SitelinksSetAddItem,
+    }
+  };
+  var options = {
+    'method' : 'post',
+    'contentType': 'application/json',
+    'headers': {
+      'Authorization': 'Bearer '+token,
+      'Accept-Language': 'ru',
+      'Client-Login': client_login,
+    }, 
+    // Convert the JavaScript object to a JSON string.
+    'payload' : JSON.stringify(data)
+  };
+  var response, ya_direct_data={}, sitelinks;
+  while (ya_direct_data.result == undefined) {
+    var response = UrlFetchApp.fetch('https://api.direct.yandex.com/json/v5/sitelinks', options);
+    var ya_direct_data = JSON.parse(response);
+    Logger.log("addSitelinks");
+    if (ya_direct_data.result != undefined){
+      sitelinks = ya_direct_data.result.AddResults;
+      
+      for (var i=0; i<sitelinks.length; i++){
+        if (sitelinks[i].Errors != undefined){
+          for (var j=0; j<sitelinks[i].Errors.length; j++){
+            Logger.log("addSitelinks Error: %s", sitelinks[i].Errors[j].Message);
+          }
+        }
+      }
+    }else{
+      Logger.log(ya_direct_data);
+      Utilities.sleep(500);
+    }
+  }
+  
+  return sitelinks;
+}
+
+function deleteSitelinks(SitelinksSetIds, client_login){
+  var data = {
+    "method": "delete",
+    "params": { 
+      "SelectionCriteria": {  /* IdsCriteria */
+        "Ids": SitelinksSetIds /* required */ 
+      }
+    }
+  };
+  var options = {
+    'method' : 'post',
+    'contentType': 'application/json',
+    'headers': {
+      'Authorization': 'Bearer '+token,
+      'Accept-Language': 'ru',
+      'Client-Login': client_login,
+    }, 
+    // Convert the JavaScript object to a JSON string.
+    'payload' : JSON.stringify(data)
+  };
+  var response, ya_direct_data={}, sitelinks;
+  while (ya_direct_data.result == undefined) {
+    response = UrlFetchApp.fetch('https://api.direct.yandex.com/json/v5/sitelinks', options);
+    ya_direct_data = JSON.parse(response);
+    Logger.log("deleteSitelinks");
+    if (ya_direct_data.result != undefined){
+      sitelinks = ya_direct_data.result.DeleteResults;
+      
+      for (var i=0; i<sitelinks.length; i++){
+        if (sitelinks[i].Errors != undefined){
+          for (var j=0; j<sitelinks[i].Errors.length; j++){
+            if (sitelinks[i].Errors[j].Details != undefined){
+              Logger.log("deleteSitelinks Error: %s | %s | %s", sitelinks[i].Errors[j].Code, sitelinks[i].Errors[j].Message, sitelinks[i].Errors[j].Details);
+            }else{
+              Logger.log("deleteSitelinks Error: %s | %s", sitelinks[i].Errors[j].Code, sitelinks[i].Errors[j].Message);
+            }
+          }
+        }
+      }
+      
+    }else{
+      Logger.log(ya_direct_data);
+      Utilities.sleep(500);
+    }
+  }
+  
+  return sitelinks;
+}
+
+function peremetka_start() {
+//  получаем список аккаунтов (не весь, а только те, которые надо перемечать)
+  
+  var ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+  var sheet = ss.getSheetByName(SHEET_NAME);//ищем существующий лист
+  if (sheet == null) {//если не создан, создаём
+    ss.insertSheet(SHEET_NAME);
+    sheet = ss.getSheetByName(SHEET_NAME);
+  }
+    
+  var data_range = sheet.getDataRange();
+  var input_range_data = data_range.getValues();
+  //  собираем логины, которые надо переметить
+  var check_logins = [];
+  for (var i=0; i<input_range_data.length; i++){
+    if ( (input_range_data[i][1] == "Да") || (input_range_data[i][1] == "да") ){
+      check_logins.push(input_range_data[i][0]);
+    }
+  }
+ 
+  for (var i=0; i<check_logins.length; i++){// цикл по логинам
+    //  кампании
+    peremetka_login(check_logins[i])
+  }// цикл по логинам
+}
+
+function peremetka_login(login){
+  var campaign_ids = [];  
+  var ads_count;  
+  var tmp_arr = getClientCampaignIds(login);
+//  объявления - обязательно указать логин
+//  проверяем по одной кампании
+    var ads = [];
+    var ads_count = 0;
+    for (var j=0; j<tmp_arr.length; j++){// цикл по кампаниям
+      Logger.log("Кампания: %s", tmp_arr[j].Id);
+      ads_count += peremetka_campaign(tmp_arr[j], login);
+    }// цикл по кампаниям
+    Logger.log("%s: %s ads", login, ads_count);
+}
+
+function peremetka_campaign(campaign_obj, login){
+  var campaign_ids = [];
+  var split_array_result = [];
+  var ads = [];
+  var update_ads = [];
+  var TextAdUpdate = {
+    "Id": "",
+    "TextAd": {
+      "Href": "",
+      "SitelinkSetId": "",
+      "OldSitelinkSetId": ""
+    }
+  };
+  var campaign_name_translit, template_template, ad_href, ads_count, QueryString, update_ad_index, update_ad_flag;
+  var template_template_for_sitelinks; // шаблонный шаблон для быстрых ссылок
+  var unique_sitelinksetids, sitelinksset_update_flag;
+  var ads_with_sitelinks_hrefs = []; //ссылки объявлений, у которых есть быстрые ссылки
+  var add_hash_to_sitelink_url = false;// при сравнении, добалвять якорь в быструю ссылку или нет
+  var added_sitelinkssets = [];
+  var sitelinksetids_arr = [];
+  var sitelinks_obj_arr = [];
+  var sitelinks_add = [];
+  var sitelinkssets_add = [];
+  var sitelinkssets = [];
+  var delete_sitelinkssetids = [];// для удаления
+  var deleted_sitelinkssetids = [];// результаты удаления
+  var update_ads_copy = []; // для привязки
+  
+  ads_count = 0;
+      ads = getAds(campaign_obj.Id, login);
+      if (ads != undefined) {
+        ads_count += ads.length; 
+        update_ads = [];
+        update_ads_copy = [];
+        ads_with_sitelinks_hrefs = [];
+        sitelinksetids_arr = [];
+        QueryString = [];
+        
+        //        транслит названия кампании
+        campaign_name_translit = translit(campaign_obj.Name);
+        //        составляем шаблонный шаблон
+        template_template = "utm_medium=cpc&utm_source=yandex&utm_campaign="+campaign_name_translit+"|{campaign_id}&utm_term={keyword}&utm_content=k50id|01000000{phrase_id}_{retargeting_id}|cid|{campaign_id}|gid|{gbid}|aid|{ad_id}|adp|{addphrases}|pos|{position_type}{position}|src|{source_type}_{source}|dvc|{device_type}|main&k50id=01000000{phrase_id}_{retargeting_id}";
+        
+        for (var k=0; k<ads.length; k++){// цикл по всем объявлениям          
+          if (ads[k].Type == "TEXT_AD"){
+            //          проверяем ссылку
+            update_ad_flag = false;
+            QueryString = getUrlParts(ads[k].TextAd.Href);
+            if (QueryString[1] != undefined){
+              //            сравниваем query string с template_template
+              if (QueryString[1] != template_template){
+                
+                QueryString[1] = template_template;
+                
+//                восстанавливаем удалённые слеши
+                if (QueryString[2]){
+                  QueryString[0] = QueryString[0]+"/";
+                }
+                QueryString.splice(2, 1);
+                
+                update_ads.push({
+                  "Id": ads[k].Id,
+                  "TextAd": {
+                    "Href": QueryString.join("?"),
+                    "SitelinkSetId": "",
+                    "OldSitelinkSetId": ""
+                  }
+                });
+                update_ad_flag = true;
+              }            
+            }else{              
+              QueryString[1] = template_template;
+              
+              //                восстанавливаем удалённые слеши
+              if (QueryString[2]){
+                QueryString[0] = QueryString[0]+"/";
+              }
+              QueryString.splice(2, 1);
+              
+              update_ads.push({
+                "Id": ads[k].Id,
+                "TextAd": {
+                  "Href": QueryString.join("?"),
+                  "SitelinkSetId": "",
+                  "OldSitelinkSetId": ""
+                }
+              });
+              update_ad_flag = true;
+            }
+            
+            //          собираем все наборы бс
+            if (ads[k].TextAd.SitelinkSetId != null){
+              sitelinksetids_arr.push(ads[k].TextAd.SitelinkSetId);
+              //            массив для сравнивения url объявления и url быстрых ссылок, [url объявления (без QueryString, id набора бс]
+              
+//              QueryString[0] добавляем без слеша
+              var urlMatchPattern = /(.*)\/$/;
+              if (urlMatchPattern.test(QueryString[0])){
+                QueryString[0] = QueryString[0].replace(/(.*)\/$/, "$1");
+              }
+              
+              ads_with_sitelinks_hrefs.push([QueryString[0],ads[k].TextAd.SitelinkSetId, ads[k].Id]);
+              if (update_ad_flag){
+                update_ads[update_ads.length-1].TextAd.OldSitelinkSetId = ads[k].TextAd.SitelinkSetId;
+              }else{                
+                update_ads.push({
+                  "Id": ads[k].Id,
+                  "TextAd": {
+                    "Href": "",
+                    "SitelinkSetId": "",
+                    "OldSitelinkSetId": ads[k].TextAd.SitelinkSetId
+                  }
+                });
+                update_ad_flag = true;
+              }
+            }
+          } 
+        }// цикл по объявлениям
+        
+        //      если найдены быстрые ссылки, проверяем их
+        if (sitelinksetids_arr.length){
+          sitelinkssets_add = [];
+          
+          unique_sitelinksetids = sitelinksetids_arr.filter( onlyUnique );
+          unique_sitelinksetids.sort(compareNumbers);
+          
+          sitelinkssets = getSitelinks(unique_sitelinksetids, login);
+          for (var k=0; k<sitelinkssets.length; k++){// цикл по быстрым ссылкам кампании (наборы)
+            sitelinksset_update_flag = false;
+            sitelinks_add = [];
+            
+            //            предварительно сделать цикл по sitelinkssets[k].Sitelinks.length чисто для определения sitelinksset_update_flag
+            for (var l=0; l<sitelinkssets[k].Sitelinks.length; l++){              
+              QueryString = getUrlParts(sitelinkssets[k].Sitelinks[l].Href);
+              //            сравниваем url быстрых ссылок набора с url объявления
+              add_hash_to_sitelink_url = false;
+              for (var m=0; m<ads_with_sitelinks_hrefs.length; m++){
+                if (sitelinkssets[k].Id == ads_with_sitelinks_hrefs[m][1]){
+                  if (ads_with_sitelinks_hrefs[m][0] == QueryString[0]){
+                    add_hash_to_sitelink_url = true;
+                  }
+                }
+              }
+              
+              if (add_hash_to_sitelink_url) {
+                template_template_for_sitelinks = template_template+"#"+translit(sitelinkssets[k].Sitelinks[l].Title);
+              }else{
+                template_template_for_sitelinks = template_template;
+              }
+              
+              if (QueryString[1] != undefined){
+                //            сравниваем query string с template_template
+                if (QueryString[1].toString() != template_template_for_sitelinks.toString()){
+                  sitelinksset_update_flag = true;
+                }else if (sitelinksset_update_flag){
+                  sitelinksset_update_flag = true;
+                }
+              }else{
+                //           query string отсутствует, добавляем к текущему урлу 
+                sitelinksset_update_flag = true;
+              }
+            }
+            
+            for (var l=0; l<sitelinkssets[k].Sitelinks.length; l++){
+              
+              QueryString = getUrlParts(sitelinkssets[k].Sitelinks[l].Href);
+              
+              //            сравниваем url быстрых ссылок набора с url объявления
+              add_hash_to_sitelink_url = false;
+              for (var m=0; m<ads_with_sitelinks_hrefs.length; m++){
+                if (sitelinkssets[k].Id == ads_with_sitelinks_hrefs[m][1]){
+                  if (ads_with_sitelinks_hrefs[m][0] == QueryString[0]){
+                    add_hash_to_sitelink_url = true;
+                  }
+                }
+              }
+              
+              if (add_hash_to_sitelink_url) {
+                template_template_for_sitelinks = template_template+"#"+translit(sitelinkssets[k].Sitelinks[l].Title);
+              }else{
+                template_template_for_sitelinks = template_template;
+              }
+              
+              if (QueryString[1] != undefined){
+                //            сравниваем query string с template_template
+                if (QueryString[1].toString() != template_template_for_sitelinks.toString()){                  
+                  update_ad_index = sitelinks_add.push(sitelinkssets[k].Sitelinks[l]) - 1; 
+                  QueryString[1] = template_template_for_sitelinks;
+                  
+//                восстанавливаем удалённые слеши
+                  if (QueryString[2]){
+                    QueryString[0] = QueryString[0]+"/";
+                  }
+                  QueryString.splice(2, 1);
+                  
+                  sitelinks_add[update_ad_index].Href = QueryString.join("?");
+                  sitelinksset_update_flag = true;
+                }else if (sitelinksset_update_flag){
+                  update_ad_index = sitelinks_add.push(sitelinkssets[k].Sitelinks[l]) - 1; 
+                  QueryString[1] = template_template_for_sitelinks;
+                  
+//                восстанавливаем удалённые слеши
+                  if (QueryString[2]){
+                    QueryString[0] = QueryString[0]+"/";
+                  }
+                  QueryString.splice(2, 1);
+                  
+                  sitelinks_add[update_ad_index].Href = QueryString.join("?");
+                  sitelinksset_update_flag = true;
+                }
+              }else{
+                //           query string отсутствует, добавляем к текущему урлу 
+                update_ad_index = sitelinks_add.push(sitelinkssets[k].Sitelinks[l]) - 1; 
+                QueryString[1] = template_template_for_sitelinks;
+                
+//                восстанавливаем удалённые слеши
+                if (QueryString[2]){
+                  QueryString[0] = QueryString[0]+"/";
+                }
+                QueryString.splice(2, 1);
+                
+                sitelinks_add[update_ad_index].Href = QueryString.join("?");
+                sitelinksset_update_flag = true;
+              }
+            }
+            if (sitelinksset_update_flag){
+              sitelinks_obj_arr.push({
+                "oldsitelink": sitelinkssets[k].Id,
+                "newsitelink": 0
+              });
+              // собираем быстрые ссылки для добавления
+              sitelinkssets_add.push({"Sitelinks":sitelinks_add});
+            }
+            
+          }// цикл по быстрым ссылкам кампании (наборы)
+          // в этом массиве все уникальные быстрые ссылки (наборы) в рамках 1 кампании, которые надо обновить
+
+          added_sitelinkssets = [];
+          //        отправить на добавление
+          if (sitelinkssets_add.length){
+            added_sitelinkssets = addSitelinks(sitelinkssets_add, login);
+          }
+          
+//          если при добавлении быстрых ссылок возникли ошибки, не отвязываем, не привязываем, не удаляем, ничего с быстрыми ссылками не делаем
+          for (var i=0; i<added_sitelinkssets.length; i++){
+            if (added_sitelinkssets[i].Errors != undefined){
+              added_sitelinkssets = [];
+              
+//              TODO:собираем данные в письмо с ошибками
+//              ...
+            }
+          }
+          
+          //        отвязать старые
+          //        цикл по наборам бс и объявлениям
+          //        +в этом же цикле связываем новые и старые наборы бс
+          //        +и собираем наборы для удаления
+          delete_sitelinkssetids = [];
+          for (var k=0; k<added_sitelinkssets.length; k++){
+            for (var l=0;l<update_ads.length;l++){
+              if (update_ads[l].TextAd.OldSitelinkSetId == sitelinks_obj_arr[k].oldsitelink) {
+                update_ads[l].TextAd.SitelinkSetId = null;
+                
+                //              создаём новый массив для привязки созданных наборов бс
+                update_ads_copy.push({
+                  "Id": update_ads[l].Id,
+                  "TextAd": {
+                    "SitelinkSetId": added_sitelinkssets[k].Id
+                  }
+                });
+                
+                delete update_ads[l].TextAd.OldSitelinkSetId;// удаляем старый параметр только для объявлений, для которых отвязывается набор бс
+                
+                if (update_ads[l].TextAd.Href == "") {// если обновляется только набор бс, удаляем пустой Href
+                  delete update_ads[l].TextAd.Href;
+                }
+              }            
+            }
+            
+            //          связываем новые и старые наборы бс
+            sitelinks_obj_arr[k].newsitelink = added_sitelinkssets[k].Id;
+            
+            //          собираем наборы для удаления
+            delete_sitelinkssetids.push(sitelinks_obj_arr[k].oldsitelink);
+          }          
+        }// условие если найдены быстрые ссылки
+        
+        //        проверяем update_ads на наличие элементов без href и sitelinksset
+        var k = update_ads.length;
+        while (k--) {
+          if ((update_ads[k].TextAd.SitelinkSetId != null) && (update_ads[k].TextAd.SitelinkSetId == "")){
+            delete update_ads[k].TextAd.SitelinkSetId;
+          }
+          
+          if (update_ads[k].TextAd.OldSitelinkSetId != undefined){// для элементов, где остался старый параметр, проверяем Href
+            if (update_ads[k].TextAd.Href != "") {// если Href указан, удаляем старый параметр
+              delete update_ads[k].TextAd.OldSitelinkSetId;
+            }else{ // иначе удаляем элемент массива, потому что в нём ничего не обновляется
+              update_ads.splice(k, 1);
+            }
+          }
+        }
+
+        //        отправляем update_ads, отвязываем наборы бс и обновляем href
+        if (update_ads.length) {
+          updateAds(update_ads, login);
+        }
+        
+        //        отправляем update_ads_copy, привязываем новые наборы бс
+        if (update_ads_copy.length) {
+          updateAds(update_ads_copy, login);
+        }
+        
+        //        удалить старые наборы бс
+        if (delete_sitelinkssetids.length) {
+          deleted_sitelinkssetids = deleteSitelinks(delete_sitelinkssetids, login);
+          Logger.log(deleted_sitelinkssetids);
+        }
+      } else {
+        Logger.log("В кампании не найдено объявлений, соответствующих критериям поиска");
+      }
+  
+  return ads_count;
+}
+
+// сортировка по возрастанию (для id)
+function compareNumbers(a, b) {
+  return a - b;
+}
+
+function getUrlParts(url) {
+//  удаляем все якоря
+  url = url.replace(/(#[\d\w-_]*)/, "");
+  
+//  заменяем двойные слэши на одинарные
+  url = url.replace(/([^:]\/)\/+/g, "$1");
+    
+  var UrlParts = url.split('?');
+  
+  //  удаляем последние слэши
+  var urlMatchPattern = /(.*)\/$/;
+  if (urlMatchPattern.test(UrlParts[0])){
+    UrlParts[0] = UrlParts[0].replace(/(.*)\/$/, "$1");
+    UrlParts.push(true);
+  }else{
+    UrlParts.push(false);
+  }
+
+  return UrlParts;
+}
+
+function onlyUnique(value, index, self) { 
+    return self.indexOf(value) === index;
+}
+
+function translit(ru_string){
+  return ru_string.replace(/([а-яё])|([\s_-])|([^a-z\d])/gi,
+                      function (all, ch, space, words, i) {
+                        if (space || words) {
+                          return space ? '-' : '';
+                        }
+                        var code = ch.charCodeAt(0),
+                            index = code == 1025 || code == 1105 ? 0 :
+                            code > 1071 ? code - 1071 : code - 1039,
+                              t = ['yo', 'a', 'b', 'v', 'g', 'd', 'e', 'zh',
+                                   'z', 'i', 'y', 'k', 'l', 'm', 'n', 'o', 'p',
+                                   'r', 's', 't', 'u', 'f', 'h', 'c', 'ch', 'sh',
+                                   'shch', '', 'y', '', 'e', 'yu', 'ya'
+                                  ]; 
+                        return t[index];
+                      });
+}
+
+//Возвращает список рекламодателей — клиентов агентства, их параметры и настройки главных представителей рекламодателя.
+// https://tech.yandex.ru/direct/doc/ref-v5/agencyclients/get-docpage/
+function getAgencyClients(){
+  var data = {
+    "method": "get",
+    "params": {
+      "SelectionCriteria": {
+        "Archived": "NO",
+      },
+      "FieldNames": ["Login"],
+    }
+  };
+  var options = {
+    'method' : 'post',
+    'contentType': 'application/json',
+    'headers': {
+      'Authorization': 'Bearer '+token,
+      'Accept-Language': 'ru',
+    }, 
+    // Convert the JavaScript object to a JSON string.
+    'payload' : JSON.stringify(data)
+  };
+  var response = UrlFetchApp.fetch('https://api.direct.yandex.com/json/v5/agencyclients', options);
+  var ya_direct_data = JSON.parse(response);
+  
+  Logger.log(ya_direct_data.result.Clients);
+  var result_clients = ya_direct_data.result.Clients;
+  
+  var ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+  var sheet = ss.getSheetByName(SHEET_NAME);//ищем существующий лист
+  if (sheet == null) {//если не создан, создаём
+    ss.insertSheet(SHEET_NAME);
+    sheet = ss.getSheetByName(SHEET_NAME);
+  }
+    
+  var data_range = sheet.getDataRange();
+  var input_range_data = data_range.getValues();
+  //  собираем логины, которые надо переметить
+  var check_str_ids = [];
+  for (var i=0; i<input_range_data.length; i++){
+    if ( (input_range_data[i][1] == "Да") || (input_range_data[i][1] == "да") ){
+      check_str_ids.push(input_range_data[i]);
+    }
+  }
+  
+  var range_array = [];
+  var logins = [];
+  for (var i=0; i<result_clients.length; i++) {
+    logins[i] = result_clients[i].Login;
+    var peremechat = false;
+    for (var j=0; j<check_str_ids.length; j++){
+      if (logins[i] == check_str_ids[j][0]){
+        range_array.push([logins[i], "Да"]);
+        peremechat = true;
+      }
+    }
+    if (!peremechat){
+      range_array.push([logins[i], "Нет"]);
+    }
+  }
+  
+  sheet.getRange(2, 1, data_range.getLastRow(), range_array[0].length).clearContent();
+  sheet.getRange(2, 1, range_array.length, range_array[0].length).setValues(range_array);
+}
